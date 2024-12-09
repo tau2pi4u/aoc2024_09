@@ -9,19 +9,17 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <map>
+#include <set>
 
-std::vector<std::vector<int>> ReadInput(std::ifstream & ifstream)
+std::vector<int> ReadInput(std::ifstream & ifstream)
 {
-    std::vector<std::vector<int>> lines;
+    std::vector<int> lines;
     std::string string;
-
-    while (std::getline(ifstream, string))
+    
+    std::getline(ifstream, string);
+    for (auto& c : string)
     {
-        lines.push_back(std::vector<int>());
-        for (auto& c : string)
-        {
-            lines.back().push_back(c - '0');
-        }
+        lines.push_back(c - '0');
     }
     return lines;
 }
@@ -94,6 +92,81 @@ void FindFreeBlocks(std::vector<int> const& line, std::vector<std::pair<size_t, 
     return;
 }
 
+void FindFreeBlocks(std::vector<int> const& line, std::map<int, std::set<size_t>>& packedFreeBlocks, std::vector<std::tuple<int, int, size_t>>& fullBlocks)
+{
+    bool empty = false;
+    int id = 0;
+    size_t currentLocation = 0;
+    for (auto& val : line)
+    {
+        if (empty)
+        {
+            packedFreeBlocks[val].insert(currentLocation);
+        }
+        else
+        {
+            fullBlocks.push_back(std::make_tuple(id, val, currentLocation));
+        }
+
+        currentLocation += val;
+        empty = !empty;
+    }
+    return;
+}
+
+void ProcessFreeBlocks(std::vector<std::pair<size_t, int>>& freeBlocks, std::map<int, std::set<size_t>>& packedFreeBlocks)
+{
+    for (auto& [location, size] : freeBlocks)
+    {
+        packedFreeBlocks[size].insert(location);
+    }
+}
+
+size_t GetFreeSpace(std::map<int, std::set<size_t>>& packedFreeBlocks, int requiredSize, size_t currentLocation)
+{
+    // Find first size big enough and with space
+    auto itr = packedFreeBlocks.lower_bound(requiredSize);
+    if (itr == packedFreeBlocks.end())
+    {
+        return currentLocation;
+    }
+    auto bestLoc = *itr->second.begin();
+    auto bestItr = itr;
+    for(; itr != packedFreeBlocks.end(); ++itr)
+    {
+        auto& [size, locations] = *itr;
+        auto location = *locations.begin();
+        if (location < bestLoc)
+        {
+            bestLoc = location;
+            bestItr = itr;
+        }
+    }
+
+    if(bestItr != packedFreeBlocks.end())
+    {
+        auto& [size, locations] = *bestItr;
+
+        auto copyTo = *locations.begin();
+        auto newSize = size - requiredSize;
+        
+        if (locations.size() == 1)
+        {
+            packedFreeBlocks.erase(size);
+        }
+        else
+        {
+            locations.erase(locations.begin());
+        }
+
+        auto& newLocations = packedFreeBlocks[newSize];
+        newLocations.insert(copyTo + requiredSize);
+        return copyTo;
+    }
+
+    return currentLocation;
+}
+
 size_t GetFreeSpace(std::vector<std::pair<size_t, int>>& freeBlocks, int requiredSize, size_t currentLocation)
 {
     for (auto itr = freeBlocks.begin(); itr != freeBlocks.end(); ++itr)
@@ -112,7 +185,6 @@ size_t GetFreeSpace(std::vector<std::pair<size_t, int>>& freeBlocks, int require
 }
 
 
-
 std::string CondensedToString(std::vector<int> condensed)
 {
     std::string s;
@@ -124,8 +196,19 @@ std::string CondensedToString(std::vector<int> condensed)
     return s;
 }
 
-std::vector<int> ShiftBlocks(std::vector<int> const& line, std::vector<std::pair<size_t, int>>& freeBlocks, std::vector<std::tuple<int, int, size_t>> fullBlocks)
+#define FAST_MODE 1
+
+std::vector<int> ShiftBlocks(std::vector<int> const& line)
 {
+    std::vector<std::tuple<int, int, size_t>> fullBlocks;
+#if FAST_MODE 
+    std::map<int, std::set<size_t>> freeBlocks;
+#else
+    std::vector<std::pair<size_t, int>> freeBlocks;
+#endif
+
+    FindFreeBlocks(line, freeBlocks, fullBlocks);
+
     bool lastIsFull = line.size() % 2;
     std::vector<int> condensed = Expand(line);
     for (auto itr = fullBlocks.rbegin(); itr != fullBlocks.rend(); ++itr)
@@ -169,6 +252,13 @@ struct Timer
     size_t total = 0;
 };
 
+int64_t Part1(std::vector<int> const& inputLine)
+{
+    auto str = Expand(inputLine);
+    auto condensed = Condense(str);
+    return CheckSum(condensed);
+}
+
 int main()
 {
     Timer timer;
@@ -177,30 +267,26 @@ int main()
     ifstream.open("input.txt");
 
     timer.Begin();
-    auto inputLines = ReadInput(ifstream);
+    auto inputLine = ReadInput(ifstream);
     timer.End("Input");
 
     timer.Begin();
-    for (auto const& line : inputLines)
-    {
-        auto str = Expand(line);
-        auto condensed = Condense(str);
-        auto count = CheckSum(condensed);
-        printf("%lld\n", count);
-    }
+    auto p1 = Part1(inputLine);
+    printf("%lld\n", p1);
     timer.End("P1");
 
     timer.Begin();
-    for (auto const& line : inputLines)
+    int64_t count;
+    int itrs = 1024;
+    for (int i = 0; i < itrs; ++i)
     {
         std::vector<std::pair<size_t, int>> freeBlocks;
         std::vector<std::tuple<int, int, size_t>> fullBlocks;
-        FindFreeBlocks(line, freeBlocks, fullBlocks);
-        auto condensed = ShiftBlocks(line, freeBlocks, fullBlocks);
-        auto count = CheckSum(condensed);
-        printf("%lld\n", count);
+        auto condensed = ShiftBlocks(inputLine);
+        count = CheckSum(condensed);
     }
-    timer.End("P2");
+    timer.End("P2", itrs);
+    printf("%lld\n", count);
     timer.PrintTotal();
 }
 
