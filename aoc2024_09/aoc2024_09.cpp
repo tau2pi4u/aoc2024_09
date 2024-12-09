@@ -130,7 +130,7 @@ size_t GetFreeSpace(std::map<int, std::set<size_t>>& packedFreeBlocks, int requi
     {
         return currentLocation;
     }
-    auto bestLoc = *itr->second.begin();
+    auto bestLoc = std::min(currentLocation, *itr->second.begin());
     auto bestItr = itr;
     for(; itr != packedFreeBlocks.end(); ++itr)
     {
